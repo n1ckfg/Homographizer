@@ -6,8 +6,37 @@ using namespace cv;
 void ofApp::setup() {
 	ofSetVerticalSync(true);
 	
+	FileStorage settings(ofToDataPath("settings.yml"), FileStorage::READ);
+	if (settings.isOpened()) {
+		int xCount = settings["xCount"], yCount = settings["yCount"];
+		calibration.setPatternSize(xCount, yCount);
+		float squareSize = settings["squareSize"];
+		calibration.setSquareSize(squareSize);
+		CalibrationPattern patternType;
+		switch (settings["patternType"]) {
+		case 0: patternType = CHESSBOARD; break;
+		case 1: patternType = CIRCLES_GRID; break;
+		case 2: patternType = ASYMMETRIC_CIRCLES_GRID; break;
+		}
+		calibration.setPatternType(CHESSBOARD); // patternType);
+	}
+
 	left.load("left.jpg");
 	right.load("right.jpg");
+
+	vector<Point2f> leftBoardPoints;
+	vector<Point2f> rightBoardPoints;
+	calibration.findBoard(toCv(left), leftBoardPoints);
+	calibration.findBoard(toCv(right), rightBoardPoints);
+	for (int i = 0; i < leftBoardPoints.size(); i++) {
+		Point2f pt = leftBoardPoints[i];
+		leftPoints.push_back(ofVec2f(pt.x, pt.y));
+	}
+	for (int i = 0; i < rightBoardPoints.size(); i++) {
+		Point2f pt = rightBoardPoints[i];
+		rightPoints.push_back(ofVec2f(pt.x + right.getWidth(), pt.y));
+	}
+
 	imitate(warpedColor, right);
 	
 	movingPoint = false;
