@@ -148,5 +148,6 @@ void ofApp::mouseReleased(int x, int y, int button) {
 void ofApp::keyPressed(int key) {
 	if(key == ' ') {
 		saveMatrix = true;
+        warpedColor.save("output.jpg");
 	}
 }
