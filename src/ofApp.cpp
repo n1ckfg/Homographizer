@@ -23,10 +23,10 @@ void ofApp::setup() {
 
     ofDirectory leftCalibrationDir("calibration/left/");
     ofDirectory rightCalibrationDir("calibration/right/");
-    leftCalibrationDir.allowExt(fileType);
+    leftCalibrationDir.allowExt(inputFileType);
     leftCalibrationDir.listDir();
     leftCalibrationDir.sort();
-    rightCalibrationDir.allowExt(fileType);
+    rightCalibrationDir.allowExt(inputFileType);
     rightCalibrationDir.listDir();
     rightCalibrationDir.sort();
     int leftCalibrationDirCount = leftCalibrationDir.size();
@@ -97,7 +97,7 @@ void ofApp::update() {
         
         if(homographyReady) {
             ofDirectory rightDir("right");
-            rightDir.allowExt(fileType);
+            rightDir.allowExt(inputFileType);
             rightDir.listDir();
             rightDir.sort();
             int rightDirCount = rightDir.size();
@@ -111,7 +111,7 @@ void ofApp::update() {
             // CV INTER NN is 113 fps, CV_INTER_LINEAR is 93 fps
             warpPerspective(right, warpedColor, homography, CV_INTER_LINEAR);
             warpedColor.update();
-            string outputUrl = "output/output_" + ofToString(counter) + "." + fileType;
+            string outputUrl = "output/output_" + ofToString(counter) + "." + outputFileType;
             warpedColor.save(outputUrl);
             if (counter < rightDirCount-1) {
                 counter++;

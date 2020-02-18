@@ -26,7 +26,8 @@ class ofApp : public ofBaseApp {
 		ofxCv::Calibration calibration;
     
         int counter = 0;
-        string fileType = "jpg";
+        string inputFileType = "jpg";
+        string outputFileType = "png";
         bool finished = false;
     
 };
