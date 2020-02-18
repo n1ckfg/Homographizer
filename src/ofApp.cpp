@@ -21,26 +21,29 @@ void ofApp::setup() {
 		calibration.setPatternType(CHESSBOARD); // patternType);
 	}
 
+    ofDirectory leftDir("left/");
+    ofDirectory rightDir("right/");
+    leftDir.allowExt("jpg");
+    rightDir.allowExt("jpg");
+    leftDir.listDir();
+    leftDir.sort();
+    rightDir.listDir();
+    rightDir.sort();
+    int leftDirCount = leftDir.size();
+    int rightDirCount = rightDir.size();
+    cout << "left: " << leftDirCount << ", right: " << rightDirCount << endl;
+    
     // load the previous homography if it's available
     ofFile previous("homography.yml");
-    if(previous.exists()) {
+    if (previous.exists()) {
         cout << "Found existing calibration file." << endl;
         FileStorage fs(ofToDataPath("homography.yml"), FileStorage::READ);
         fs["homography"] >> homography;
         homographyReady = true;
-    } else {
-        ofDirectory leftDir("left/");
-        ofDirectory rightDir("right/");
-        leftDir.allowExt("jpg");
-        rightDir.allowExt("jpg");
-        leftDir.listDir();
-        leftDir.sort();
-        rightDir.listDir();
-        rightDir.sort();
-        int leftDirCount = leftDir.size();
-        int rightDirCount = rightDir.size();
-        cout << "left: " << leftDirCount << ", right: " << rightDirCount << endl;
         
+        string rightUrl = rightDir.getPath(0);
+        right.load(rightUrl);
+    } else {
         for (int i=0; i<leftDir.size(); i++) {
             string leftUrl = leftDir.getPath(i);
             string rightUrl = rightDir.getPath(i);
@@ -169,7 +172,6 @@ void ofApp::mouseReleased(int x, int y, int button) {
 
 void ofApp::keyPressed(int key) {
 	if(key == ' ') {
-		saveMatrix = true;
-        warpedColor.save("output/output.jpg");
+        //
 	}
 }
