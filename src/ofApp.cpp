@@ -5,7 +5,7 @@ using namespace cv;
 
 void ofApp::setup() {
 	ofSetVerticalSync(true);
-	
+
 	FileStorage settings(ofToDataPath("settings.yml"), FileStorage::READ);
 	if (settings.isOpened()) {
 		int xCount = settings["xCount"], yCount = settings["yCount"];
@@ -21,55 +21,77 @@ void ofApp::setup() {
 		calibration.setPatternType(CHESSBOARD); // patternType);
 	}
 
-	left.load("left.jpg");
-	right.load("right.jpg");
+    // load the previous homography if it's available
+    ofFile previous("homography.yml");
+    if(previous.exists()) {
+        cout << "Found existing calibration file." << endl;
+        FileStorage fs(ofToDataPath("homography.yml"), FileStorage::READ);
+        fs["homography"] >> homography;
+        homographyReady = true;
+    } else {
+        ofDirectory leftDir("left/");
+        ofDirectory rightDir("right/");
+        leftDir.allowExt("jpg");
+        rightDir.allowExt("jpg");
+        leftDir.listDir();
+        leftDir.sort();
+        rightDir.listDir();
+        rightDir.sort();
+        int leftDirCount = leftDir.size();
+        int rightDirCount = rightDir.size();
+        cout << "left: " << leftDirCount << ", right: " << rightDirCount << endl;
+        
+        for (int i=0; i<leftDir.size(); i++) {
+            string leftUrl = leftDir.getPath(i);
+            string rightUrl = rightDir.getPath(i);
+            cout << "left " << (i+1) << "/" << leftDirCount << ": " << leftUrl << endl;
+            cout << "right " << (i+1) << "/" << rightDirCount << ": " << rightUrl << endl;
 
-	vector<Point2f> leftBoardPoints;
-	vector<Point2f> rightBoardPoints;
-	calibration.findBoard(toCv(left), leftBoardPoints);
-	calibration.findBoard(toCv(right), rightBoardPoints);
-	for (int i = 0; i < leftBoardPoints.size(); i++) {
-		Point2f pt = leftBoardPoints[i];
-		leftPoints.push_back(ofVec2f(pt.x, pt.y));
-	}
-	for (int i = 0; i < rightBoardPoints.size(); i++) {
-		Point2f pt = rightBoardPoints[i];
-		rightPoints.push_back(ofVec2f(pt.x + right.getWidth(), pt.y));
-	}
+            left.load(leftUrl);
+            right.load(rightUrl);
 
-	imitate(warpedColor, right);
-	
-	movingPoint = false;
-	saveMatrix = false;
-	homographyReady = false;
-	
-	// load the previous homography if it's available
-	ofFile previous("homography.yml");
-	if(previous.exists()) {
-		FileStorage fs(ofToDataPath("homography.yml"), FileStorage::READ);
-		fs["homography"] >> homography;
-		homographyReady = true;
-	}
+            vector<Point2f> leftBoardPoints;
+            vector<Point2f> rightBoardPoints;
+            calibration.findBoard(toCv(left), leftBoardPoints);
+            calibration.findBoard(toCv(right), rightBoardPoints);
+            for (int i = 0; i < leftBoardPoints.size(); i++) {
+                Point2f pt = leftBoardPoints[i];
+                leftPoints.push_back(ofVec2f(pt.x, pt.y));
+            }
+            for (int i = 0; i < rightBoardPoints.size(); i++) {
+                Point2f pt = rightBoardPoints[i];
+                rightPoints.push_back(ofVec2f(pt.x + right.getWidth(), pt.y));
+            }
+        }
+
+        imitate(warpedColor, right);
+        
+        movingPoint = false;
+        saveMatrix = false;
+        homographyReady = false;
+    }
 }
 
 void ofApp::update() {
-	if(leftPoints.size() >= 4) {
-		vector<Point2f> srcPoints, dstPoints;
-		for(int i = 0; i < leftPoints.size(); i++) {
-			srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
-			dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
-		}
-		
-		// generate a homography from the two sets of points
-		homography = findHomography(Mat(srcPoints), Mat(dstPoints));
-		homographyReady = true;
-		
-		if(saveMatrix) {
-			FileStorage fs(ofToDataPath("homography.yml"), FileStorage::WRITE);
-			fs << "homography" << homography;
-			saveMatrix = false;
-		}
-	}
+    if (!homographyReady) {
+        if(leftPoints.size() >= 4) {
+            vector<Point2f> srcPoints, dstPoints;
+            for(int i = 0; i < leftPoints.size(); i++) {
+                srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
+                dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
+            }
+            
+            // generate a homography from the two sets of points
+            homography = findHomography(Mat(srcPoints), Mat(dstPoints));
+            homographyReady = true;
+            
+            //if(saveMatrix) {
+            FileStorage fs(ofToDataPath("homography.yml"), FileStorage::WRITE);
+            fs << "homography" << homography;
+            //saveMatrix = false;
+            //}
+        }
+    }
 	
 	if(homographyReady) {
 		// this is how you warp one ofImage into another ofImage given the homography matrix
@@ -93,15 +115,15 @@ void ofApp::draw() {
 	left.draw(0, 0);
 	right.draw(left.getWidth(), 0);
 	if(homographyReady) {
-		ofEnableBlendMode(OF_BLENDMODE_MULTIPLY);
+		ofEnableBlendMode(OF_BLENDMODE_ADD);
 		ofSetColor(255, 128);
 		warpedColor.draw(0, 0);
 		ofDisableBlendMode();
 	}
 	
-	ofSetColor(ofColor::red);
+	ofSetColor(255, 0, 0);
 	drawPoints(leftPoints);
-	ofSetColor(ofColor::blue);
+	ofSetColor(0, 255, 255);
 	drawPoints(rightPoints);
 	ofSetColor(128);
 	for(int i = 0; i < leftPoints.size(); i++) {
@@ -148,6 +170,6 @@ void ofApp::mouseReleased(int x, int y, int button) {
 void ofApp::keyPressed(int key) {
 	if(key == ' ') {
 		saveMatrix = true;
-        warpedColor.save("output.jpg");
+        warpedColor.save("output/output.jpg");
 	}
 }
