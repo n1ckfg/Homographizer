@@ -21,37 +21,35 @@ void ofApp::setup() {
 		calibration.setPatternType(CHESSBOARD); // patternType);
 	}
 
-    ofDirectory leftDir("left/");
-    ofDirectory rightDir("right/");
-    leftDir.allowExt("jpg");
-    rightDir.allowExt("jpg");
-    leftDir.listDir();
-    leftDir.sort();
-    rightDir.listDir();
-    rightDir.sort();
-    int leftDirCount = leftDir.size();
-    int rightDirCount = rightDir.size();
-    cout << "left: " << leftDirCount << ", right: " << rightDirCount << endl;
-    
+    ofDirectory leftCalibrationDir("calibration/left/");
+    ofDirectory rightCalibrationDir("calibration/right/");
+    leftCalibrationDir.allowExt(fileType);
+    leftCalibrationDir.listDir();
+    leftCalibrationDir.sort();
+    rightCalibrationDir.allowExt(fileType);
+    rightCalibrationDir.listDir();
+    rightCalibrationDir.sort();
+    int leftCalibrationDirCount = leftCalibrationDir.size();
+    int rightCalibrationDirCount = rightCalibrationDir.size();
+    cout << "calib L: " << leftCalibrationDirCount << ", calib R: " << rightCalibrationDirCount << endl;
+
     // load the previous homography if it's available
-    ofFile previous("homography.yml");
+    string calibrationUrl = "calibration/homography.yml";
+    ofFile previous(calibrationUrl);
     if (previous.exists()) {
         cout << "Found existing calibration file." << endl;
-        FileStorage fs(ofToDataPath("homography.yml"), FileStorage::READ);
+        FileStorage fs(ofToDataPath(calibrationUrl), FileStorage::READ);
         fs["homography"] >> homography;
         homographyReady = true;
-        
-        string rightUrl = rightDir.getPath(0);
-        right.load(rightUrl);
     } else {
-        for (int i=0; i<leftDir.size(); i++) {
-            string leftUrl = leftDir.getPath(i);
-            string rightUrl = rightDir.getPath(i);
-            cout << "left " << (i+1) << "/" << leftDirCount << ": " << leftUrl << endl;
-            cout << "right " << (i+1) << "/" << rightDirCount << ": " << rightUrl << endl;
+        for (int i=0; i<leftCalibrationDir.size(); i++) {
+            string leftCalibrationUrl = leftCalibrationDir.getPath(i);
+            string rightCalibrationUrl = rightCalibrationDir.getPath(i);
+            cout << "calib L " << (i+1) << "/" << leftCalibrationDirCount << ": " << leftCalibrationUrl << endl;
+            cout << "calib R " << (i+1) << "/" << rightCalibrationDirCount << ": " << rightCalibrationUrl << endl;
 
-            left.load(leftUrl);
-            right.load(rightUrl);
+            left.load(leftCalibrationUrl);
+            right.load(rightCalibrationUrl);
 
             vector<Point2f> leftBoardPoints;
             vector<Point2f> rightBoardPoints;
@@ -66,8 +64,6 @@ void ofApp::setup() {
                 rightPoints.push_back(ofVec2f(pt.x + right.getWidth(), pt.y));
             }
         }
-
-        imitate(warpedColor, right);
         
         movingPoint = false;
         saveMatrix = false;
@@ -76,32 +72,54 @@ void ofApp::setup() {
 }
 
 void ofApp::update() {
-    if (!homographyReady) {
-        if(leftPoints.size() >= 4) {
-            vector<Point2f> srcPoints, dstPoints;
-            for(int i = 0; i < leftPoints.size(); i++) {
-                srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
-                dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
+    if (finished) {
+        warpedColor.update();
+    } else {
+        if (!homographyReady) {
+            if(leftPoints.size() >= 4) {
+                vector<Point2f> srcPoints, dstPoints;
+                for(int i = 0; i < leftPoints.size(); i++) {
+                    srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
+                    dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
+                }
+                
+                // generate a homography from the two sets of points
+                homography = findHomography(Mat(srcPoints), Mat(dstPoints));
+                
+                //if(saveMatrix) {
+                FileStorage fs(ofToDataPath("calibration/homography.yml"), FileStorage::WRITE);
+                fs << "homography" << homography;
+                //saveMatrix = false;
+                //}
+                homographyReady = true;
             }
+        }
+        
+        if(homographyReady) {
+            ofDirectory rightDir("right");
+            rightDir.allowExt(fileType);
+            rightDir.listDir();
+            rightDir.sort();
+            int rightDirCount = rightDir.size();
             
-            // generate a homography from the two sets of points
-            homography = findHomography(Mat(srcPoints), Mat(dstPoints));
-            homographyReady = true;
+            string rightUrl = rightDir.getPath(counter);
+            cout << "main R " << (counter+1) << "/" << rightDirCount << ": " << rightUrl << endl;
+            right.load(rightUrl);
+            imitate(warpedColor, right);
             
-            //if(saveMatrix) {
-            FileStorage fs(ofToDataPath("homography.yml"), FileStorage::WRITE);
-            fs << "homography" << homography;
-            //saveMatrix = false;
-            //}
+            // this is how you warp one ofImage into another ofImage given the homography matrix
+            // CV INTER NN is 113 fps, CV_INTER_LINEAR is 93 fps
+            warpPerspective(right, warpedColor, homography, CV_INTER_LINEAR);
+            warpedColor.update();
+            string outputUrl = "output/output_" + ofToString(counter) + "." + fileType;
+            warpedColor.save(outputUrl);
+            if (counter < rightDirCount-1) {
+                counter++;
+            } else {
+                finished = true;
+            }
         }
     }
-	
-	if(homographyReady) {
-		// this is how you warp one ofImage into another ofImage given the homography matrix
-		// CV INTER NN is 113 fps, CV_INTER_LINEAR is 93 fps
-		warpPerspective(right, warpedColor, homography, CV_INTER_LINEAR);
-		warpedColor.update();
-	}
 }
 
 void drawPoints(vector<ofVec2f>& points) {

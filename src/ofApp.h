@@ -23,7 +23,10 @@ class ofApp : public ofBaseApp {
 		bool homographyReady;
 	
 		cv::Mat homography;
-
 		ofxCv::Calibration calibration;
+    
+        int counter = 0;
+        string fileType = "jpg";
+        bool finished = false;
     
 };
