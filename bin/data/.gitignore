@@ -1,4 +1,10 @@
-calibration/*
-output/*
-left/*
-right/*
+calibration/left/*.jpg
+calibration/left/*.png
+calibration/right/*.jpg
+calibration/right/*.png
+calibration/*.yml
+right/*.jpg
+right/*.png
+output/*.jpg
+output/*.png
+
