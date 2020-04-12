@@ -122,7 +122,7 @@ void ofApp::update() {
     }
 }
 
-void drawPoints(vector<ofVec2f>& points) {
+void ofApp::drawPoints(vector<ofVec2f>& points) {
 	ofNoFill();
 	for(int i = 0; i < points.size(); i++) {
 		ofDrawCircle(points[i], 10);
