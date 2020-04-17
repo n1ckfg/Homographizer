@@ -6,114 +6,209 @@ using namespace cv;
 void ofApp::setup() {
 	ofSetVerticalSync(true);
 
-	FileStorage settings(ofToDataPath("settings.yml"), FileStorage::READ);
+	FileStorage settings(ofToDataPath("targets/target_settings.yml"), FileStorage::READ);
 	if (settings.isOpened()) {
 		int xCount = settings["xCount"], yCount = settings["yCount"];
-		calibration.setPatternSize(xCount, yCount);
+		homographyCalibration.setPatternSize(xCount, yCount);
+		distortionCalibration_L.setPatternSize(xCount, yCount);
+		distortionCalibration_R.setPatternSize(xCount, yCount);
+
 		float squareSize = settings["squareSize"];
-		calibration.setSquareSize(squareSize);
+		homographyCalibration.setSquareSize(squareSize);
+		distortionCalibration_L.setSquareSize(squareSize);
+		distortionCalibration_R.setSquareSize(squareSize);
+
 		CalibrationPattern patternType;
 		switch (settings["patternType"]) {
-		case 0: patternType = CHESSBOARD; break;
-		case 1: patternType = CIRCLES_GRID; break;
-		case 2: patternType = ASYMMETRIC_CIRCLES_GRID; break;
+			case 0: patternType = CHESSBOARD; break;
+			case 1: patternType = CIRCLES_GRID; break;
+			case 2: patternType = ASYMMETRIC_CIRCLES_GRID; break;
 		}
-		calibration.setPatternType(CHESSBOARD); // patternType);
+		homographyCalibration.setPatternType(CHESSBOARD); // patternType);
+		distortionCalibration_L.setPatternType(CHESSBOARD); // patternType);
+		distortionCalibration_R.setPatternType(CHESSBOARD); // patternType);
 	}
 
     ofDirectory leftCalibrationDir("calibration/left/");
-    ofDirectory rightCalibrationDir("calibration/right/");
     leftCalibrationDir.allowExt(inputFileType);
     leftCalibrationDir.listDir();
     leftCalibrationDir.sort();
-    rightCalibrationDir.allowExt(inputFileType);
+	int leftCalibrationDirCount = leftCalibrationDir.size();
+
+	ofDirectory rightCalibrationDir("calibration/right/");
+	rightCalibrationDir.allowExt(inputFileType);
     rightCalibrationDir.listDir();
     rightCalibrationDir.sort();
-    int leftCalibrationDirCount = leftCalibrationDir.size();
     int rightCalibrationDirCount = rightCalibrationDir.size();
-    cout << "calib L: " << leftCalibrationDirCount << ", calib R: " << rightCalibrationDirCount << endl;
 
-    // load the previous homography if it's available
-    string calibrationUrl = "calibration/homography.yml";
-    ofFile previous(calibrationUrl);
-    if (previous.exists()) {
-        cout << "Found existing calibration file." << endl;
-        FileStorage fs(ofToDataPath(calibrationUrl), FileStorage::READ);
+	cout << "calib L: " << leftCalibrationDirCount << ", calib R: " << rightCalibrationDirCount << endl;
+
+	// 1. Calculate lens distortion
+	string distortionCalibrationUrl_L = "calibration/distortion_L.yml";
+	ofFile previousDistortion_L(distortionCalibrationUrl_L);
+	distortionCalibration_L.setFillFrame(true); // true by default
+
+	string distortionCalibrationUrl_R = "calibration/distortion_R.yml";
+	ofFile previousDistortion_R(distortionCalibrationUrl_R);
+	distortionCalibration_R.setFillFrame(true); // true by default
+
+	if (previousDistortion_L.exists() && previousDistortion_R.exists()) {
+		// 1.1. Load the previous distortion if it's available
+		cout << "Found existing distortion calibration files." << endl;
+		distortionCalibration_L.load(distortionCalibrationUrl_L);
+		distortionCalibration_R.load(distortionCalibrationUrl_R);
+	} else {
+		// 1.2. Otherwise calculate the distortion.
+		for (int i = 0; i < leftCalibrationDir.size(); i++) {
+			string leftCalibrationUrl = leftCalibrationDir.getPath(i);
+			cout << "calib L " << (i + 1) << "/" << leftCalibrationDirCount << ": " << leftCalibrationUrl << endl;
+			left.load(leftCalibrationUrl);
+			distortionCalibration_L.add(toCv(left));
+
+			string rightCalibrationUrl = rightCalibrationDir.getPath(i);
+			cout << "calib R " << (i + 1) << "/" << rightCalibrationDirCount << ": " << rightCalibrationUrl << endl;
+			right.load(rightCalibrationUrl);
+			distortionCalibration_R.add(toCv(right));
+		}
+
+		distortionCalibration_L.calibrate();
+		distortionCalibration_L.clean();
+		distortionCalibration_L.save(distortionCalibrationUrl_L);
+
+		distortionCalibration_R.calibrate();
+		distortionCalibration_R.clean();
+		distortionCalibration_R.save(distortionCalibrationUrl_R);
+	}
+
+	// 2. Calculate the homography.
+    string homographyCalibrationUrl = "calibration/homography.yml";
+    ofFile previousHomography(homographyCalibrationUrl);
+    
+	if (previousHomography.exists()) {
+		// 2.1. load the previous homography if it's available
+		cout << "Found existing homography calibration file." << endl;
+        FileStorage fs(ofToDataPath(homographyCalibrationUrl), FileStorage::READ);
         fs["homography"] >> homography;
         homographyReady = true;
     } else {
+		// 2.2. Otherwise calculate the homography.
         for (int i=0; i<leftCalibrationDir.size(); i++) {
             string leftCalibrationUrl = leftCalibrationDir.getPath(i);
-            string rightCalibrationUrl = rightCalibrationDir.getPath(i);
-            cout << "calib L " << (i+1) << "/" << leftCalibrationDirCount << ": " << leftCalibrationUrl << endl;
-            cout << "calib R " << (i+1) << "/" << rightCalibrationDirCount << ": " << rightCalibrationUrl << endl;
+			cout << "calibH L " << (i + 1) << "/" << leftCalibrationDirCount << ": " << leftCalibrationUrl << endl;
+			left.load(leftCalibrationUrl);
+			left_mat = toCv(left);
 
-            left.load(leftCalibrationUrl);
-            right.load(rightCalibrationUrl);
+			string rightCalibrationUrl = rightCalibrationDir.getPath(i);
+            cout << "calibH R " << (i+1) << "/" << rightCalibrationDirCount << ": " << rightCalibrationUrl << endl;
+			right.load(rightCalibrationUrl);
+			right_mat = toCv(right);
+			
+			vector<Point2f> leftBoardPoints;
+			vector<Point2f> rightBoardPoints;
 
-            vector<Point2f> leftBoardPoints;
-            vector<Point2f> rightBoardPoints;
-            calibration.findBoard(toCv(left), leftBoardPoints);
-            calibration.findBoard(toCv(right), rightBoardPoints);
+			if (useUndistort) {
+				// apply undistortion
+				imitate(left_undistort, left_mat);
+				distortionCalibration_L.undistort(left_mat, left_undistort);
+				homographyCalibration.findBoard(left_undistort, leftBoardPoints);
+
+				imitate(right_undistort, right_mat);
+				distortionCalibration_R.undistort(right_mat, right_undistort);
+				homographyCalibration.findBoard(right_undistort, rightBoardPoints);
+			} else {
+				homographyCalibration.findBoard(left_mat, leftBoardPoints);
+				homographyCalibration.findBoard(right_mat, rightBoardPoints);
+			}
+
             for (int i = 0; i < leftBoardPoints.size(); i++) {
                 Point2f pt = leftBoardPoints[i];
                 leftPoints.push_back(ofVec2f(pt.x, pt.y));
             }
+
             for (int i = 0; i < rightBoardPoints.size(); i++) {
                 Point2f pt = rightBoardPoints[i];
                 rightPoints.push_back(ofVec2f(pt.x + right.getWidth(), pt.y));
             }
         }
         
-        movingPoint = false;
-        saveMatrix = false;
+        //movingPoint = false;
+        //saveMatrix = false;
         homographyReady = false;
+
+		// 3. Finally, apply the homography.
+		if (leftPoints.size() >= 4) {
+			vector<Point2f> srcPoints, dstPoints;
+			for (int i = 0; i < leftPoints.size(); i++) {
+				srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
+				dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
+			}
+
+			// generate a homography from the two sets of points
+			homography = findHomography(Mat(srcPoints), Mat(dstPoints));
+
+			//if(saveMatrix) {
+			FileStorage fs(ofToDataPath("calibration/homography.yml"), FileStorage::WRITE);
+			fs << "homography" << homography;
+			//saveMatrix = false;
+			//}
+			homographyReady = true;
+		} else {
+			cout << "ERROR did not find at least four correspondences." << endl;
+		}
     }
 }
 
 void ofApp::update() {
     if (finished) {
         warpedColor.update();
-    } else {
-        if (!homographyReady) {
-            if(leftPoints.size() >= 4) {
-                vector<Point2f> srcPoints, dstPoints;
-                for(int i = 0; i < leftPoints.size(); i++) {
-                    srcPoints.push_back(Point2f(rightPoints[i].x - left.getWidth(), rightPoints[i].y));
-                    dstPoints.push_back(Point2f(leftPoints[i].x, leftPoints[i].y));
-                }
-                
-                // generate a homography from the two sets of points
-                homography = findHomography(Mat(srcPoints), Mat(dstPoints));
-                
-                //if(saveMatrix) {
-                FileStorage fs(ofToDataPath("calibration/homography.yml"), FileStorage::WRITE);
-                fs << "homography" << homography;
-                //saveMatrix = false;
-                //}
-                homographyReady = true;
-            }
-        }
-        
-        if(homographyReady) {
-            ofDirectory rightDir("right");
+    } else {      
+        if (homographyReady) {
+			ofDirectory leftDir("input_left");
+			leftDir.allowExt(inputFileType);
+			leftDir.listDir();
+			leftDir.sort();
+			int leftDirCount = leftDir.size();
+
+            ofDirectory rightDir("input_right");
             rightDir.allowExt(inputFileType);
             rightDir.listDir();
             rightDir.sort();
             int rightDirCount = rightDir.size();
             
-            string rightUrl = rightDir.getPath(counter);
-            cout << "main R " << (counter+1) << "/" << rightDirCount << ": " << rightUrl << endl;
-            right.load(rightUrl);
-            imitate(warpedColor, right);
-            
+            string leftUrl = leftDir.getPath(counter);
+            cout << "main L " << (counter + 1) << "/" << leftDirCount << ": " << leftUrl << endl;
+            left.load(leftUrl);
+			
+			if (useUndistort) {
+				left_mat = toCv(left);
+				imitate(left_undistort, left_mat);
+				distortionCalibration_L.undistort(left_mat, left_undistort);
+				toOf(left_undistort, left);
+			}
+
+			string outputUrl_L = "output_left/output_L_" + ofToString(counter) + "." + outputFileType;
+			left.save(outputUrl_L);
+
+			string rightUrl = rightDir.getPath(counter);
+			cout << "main R " << (counter + 1) << "/" << rightDirCount << ": " << rightUrl << endl;
+			right.load(rightUrl);
+			
+			if (useUndistort) {
+				right_mat = toCv(right);
+				imitate(right_undistort, right_mat);
+				distortionCalibration_R.undistort(right_mat, right_undistort);
+				toOf(right_undistort, right);
+			}
+
             // this is how you warp one ofImage into another ofImage given the homography matrix
             // CV INTER NN is 113 fps, CV_INTER_LINEAR is 93 fps
-            warpPerspective(right, warpedColor, homography, CV_INTER_LINEAR);
+			imitate(warpedColor, right);
+			warpPerspective(right, warpedColor, homography, CV_INTER_LINEAR);
             warpedColor.update();
-            string outputUrl = "output/output_" + ofToString(counter) + "." + outputFileType;
-            warpedColor.save(outputUrl);
-            if (counter < rightDirCount-1) {
+            string outputUrl_R = "output_right/output_R_" + ofToString(counter) + "." + outputFileType;
+            warpedColor.save(outputUrl_R);
+            
+			if (counter < rightDirCount-1) {
                 counter++;
             } else {
                 finished = true;
@@ -166,30 +261,3 @@ bool ofApp::movePoint(vector<ofVec2f>& points, ofVec2f point) {
 	return false;
 }
 
-void ofApp::mousePressed(int x, int y, int button) {
-	ofVec2f cur(x, y);
-	ofVec2f rightOffset(left.getWidth(), 0);
-	if(!movePoint(leftPoints, cur) && !movePoint(rightPoints, cur)) {
-		if(x > left.getWidth()) {
-			cur -= rightOffset;
-		}
-		leftPoints.push_back(cur);
-		rightPoints.push_back(cur + rightOffset);
-	}
-}
-
-void ofApp::mouseDragged(int x, int y, int button) {
-	if(movingPoint) {
-		curPoint->set(x, y);
-	}
-}
-
-void ofApp::mouseReleased(int x, int y, int button) {
-	movingPoint = false;
-}
-
-void ofApp::keyPressed(int key) {
-	if(key == ' ') {
-        //
-	}
-}

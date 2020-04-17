@@ -3,8 +3,12 @@ calibration/left/*.png
 calibration/right/*.jpg
 calibration/right/*.png
 calibration/*.yml
-right/*.jpg
-right/*.png
-output/*.jpg
-output/*.png
+input_left/*.jpg
+input_left/*.png
+input_right/*.jpg
+input_right/*.png
+output_left/*.jpg
+output_left/*.png
+output_right/*.jpg
+output_right/*.png
 
