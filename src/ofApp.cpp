@@ -6,7 +6,7 @@ using namespace cv;
 void ofApp::setup() {
 	ofSetVerticalSync(true);
 
-	FileStorage settings(ofToDataPath("targets/target_settings.yml"), FileStorage::READ);
+	FileStorage settings(ofToDataPath("calibration/target/target_settings.yml"), FileStorage::READ);
 	if (settings.isOpened()) {
 		int xCount = settings["xCount"], yCount = settings["yCount"];
 		homographyCalibration.setPatternSize(xCount, yCount);

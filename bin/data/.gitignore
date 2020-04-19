@@ -1,3 +1,4 @@
+calibration_sets/*
 calibration/left/*.jpg
 calibration/left/*.png
 calibration/right/*.jpg

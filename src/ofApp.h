@@ -25,7 +25,7 @@ class ofApp : public ofBaseApp {
 		bool useUndistort = false;
 
         int counter = 0;
-        string inputFileType = "jpg";
+        string inputFileType = "png";
         string outputFileType = "png";
         bool finished = false;
     
